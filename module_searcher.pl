@@ -76,8 +76,10 @@ sub main {
                 }
 
                 if($ok) {
-                        print "permutation: \n".join("\n", @{$shuffled})."\n";;
-                        die "OK";
+                        my $ongreen = color("BRIGHT_BLUE on_green");
+                        my $reset = color("reset");
+                        print "permutation:\n".$ongreen."module load ".join("$reset\n$ongreen"."module load ", @{$shuffled})."$reset\n";
+                        exit 0;
                 }
         }
 }
