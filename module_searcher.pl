@@ -103,6 +103,7 @@ sub check_combination {
         }
 
         foreach my $python_import (@{$options{python_modules_to_load}}) {
+                next unless $ok;
                 print "python_import: $python_import\n";
                 if (!python_module_is_loadable($python_import)) {
                         red "error $python_import";
@@ -114,6 +115,7 @@ sub check_combination {
 
         if($ok) {
             foreach my $bash_code (@{$options{bashcode_to_run}}) {
+                    next unless $ok;
                     print "bash_code: $bash_code\n";
                     system("$bash_code");
                     if(!$? == 0) {
@@ -127,6 +129,7 @@ sub check_combination {
 
         if($ok) {
             foreach my $program (@{$options{programs_to_find}}) {
+                    next unless $ok;
                     print "which $program";
                     system("which $program");
                     if(!$? == 0) {
