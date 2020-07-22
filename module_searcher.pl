@@ -75,26 +75,30 @@ sub check_combination {
                 }
         }
 
-        foreach my $bash_code (@{$options{bashcode_to_run}}) {
-                print "bash_code: $bash_code\n";
-                system("$bash_code");
-                if(!$? == 0) {
-                        red "error $bash_code";
-                        $ok = 0;
-                } else {
-                        green "$bash_code ok";
-                }
+        if($ok) {
+            foreach my $bash_code (@{$options{bashcode_to_run}}) {
+                    print "bash_code: $bash_code\n";
+                    system("$bash_code");
+                    if(!$? == 0) {
+                            red "error $bash_code";
+                            $ok = 0;
+                    } else {
+                            green "$bash_code ok";
+                    }
+            }
         }
 
-        foreach my $program (@{$options{programs_to_find}}) {
-                print "which $program";
-                system("which $program");
-                if(!$? == 0) {
-                        red "error $program";
-                        $ok = 0;
-                } else {
-                        green "$program ok";
-                }
+        if($ok) {
+            foreach my $program (@{$options{programs_to_find}}) {
+                    print "which $program";
+                    system("which $program");
+                    if(!$? == 0) {
+                            red "error $program";
+                            $ok = 0;
+                    } else {
+                            green "$program ok";
+                    }
+            }
         }
 
         if($ok) {
