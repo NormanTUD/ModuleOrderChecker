@@ -12,7 +12,9 @@ my %options = (
         python_modules_to_load => [],
         bashcode_to_run => [],
         programs_to_find => [],
-        modenv => ''
+        modenv => '',
+        max_tries => 0,
+        max_time => 0
 );
 
 analyze_args(@ARGV);
@@ -30,57 +32,76 @@ sub green ($) {
 }
 
 sub main {
-        while (1) {
-                print "=============================>\n";
-                my $shuffled = \@{$options{modules_to_load}};
-                fisher_yates_shuffle($shuffled);
+        my $continue = 1;
+        my $i = 1;
+        my $t_start = time();
+        while ($continue) {
+            print "=============================>\n";
+            my $shuffled = \@{$options{modules_to_load}};
+            fisher_yates_shuffle($shuffled);
+            check_combination($shuffled);
+            $i++;
+            if($options{max_tries} && $i > $options{max_tries}) {
+                warn "Reached limit of maximally $options{max_tries} checks. Stopping";
+                $continue = 0;
+            }
 
-                my $ok = 1;
-                module_purge();
-                module_load("modenv/$options{modenv}");
+            my $diff = time() - $t_start;
+            if($options{max_time} && $diff > $options{max_time}) {
+                warn "Hit time limit ($diff > $options{max_time})";
+                $continue = 0;
+            }
+        }
+}
 
-                foreach my $ml (@{$shuffled}) {
-                        module_load($ml);
+sub check_combination {
+        my $shuffled = shift;
+
+        my $ok = 1;
+        module_purge();
+        module_load("modenv/$options{modenv}");
+
+        foreach my $ml (@{$shuffled}) {
+                module_load($ml);
+        }
+
+        foreach my $python_import (@{$options{python_modules_to_load}}) {
+                print "python_import: $python_import\n";
+                if (!python_module_is_loadable($python_import)) {
+                        red "error $python_import";
+                        $ok = 0;
+                } else {
+                        green "$python_import ok";
                 }
+        }
 
-                foreach my $python_import (@{$options{python_modules_to_load}}) {
-                        print "python_import: $python_import\n";
-                        if (!python_module_is_loadable($python_import)) {
-                                red "error $python_import";
-                                $ok = 0;
-                        } else {
-                                green "$python_import ok";
-                        }
+        foreach my $bash_code (@{$options{bashcode_to_run}}) {
+                print "bash_code: $bash_code\n";
+                system("$bash_code");
+                if(!$? == 0) {
+                        red "error $bash_code";
+                        $ok = 0;
+                } else {
+                        green "$bash_code ok";
                 }
+        }
 
-                foreach my $bash_code (@{$options{bashcode_to_run}}) {
-                        print "bash_code: $bash_code\n";
-                        system("$bash_code");
-                        if(!$? == 0) {
-                                red "error $bash_code";
-                                $ok = 0;
-                        } else {
-                                green "$bash_code ok";
-                        }
+        foreach my $program (@{$options{programs_to_find}}) {
+                print "which $program";
+                system("which $program");
+                if(!$? == 0) {
+                        red "error $program";
+                        $ok = 0;
+                } else {
+                        green "$program ok";
                 }
+        }
 
-                foreach my $program (@{$options{programs_to_find}}) {
-                        print "which $program";
-                        system("which $program");
-                        if(!$? == 0) {
-                                red "error $program";
-                                $ok = 0;
-                        } else {
-                                green "$program ok";
-                        }
-                }
-
-                if($ok) {
-                        my $ongreen = color("BRIGHT_BLUE on_green");
-                        my $reset = color("reset");
-                        print "permutation:\n".$ongreen."module load ".join("$reset\n$ongreen"."module load ", @{$shuffled})."$reset\n";
-                        exit 0;
-                }
+        if($ok) {
+                my $ongreen = color("BRIGHT_BLUE on_green");
+                my $reset = color("reset");
+                print "permutation:\n".$ongreen."module load ".join("$reset\n$ongreen"."module load ", @{$shuffled})."$reset\n";
+                exit 0;
         }
 }
 
@@ -114,7 +135,6 @@ sub fisher_yates_shuffle {
         }
 }
 
-
 sub python_module_is_loadable {
         my $module = shift;
 
@@ -131,7 +151,19 @@ sub _help {
         my $exit_code = shift // 0;
 
         print <<EOF;
-perl ml.pl --modenv=ml --ml=Hyperopt/0.2.2-fosscuda-2019b-Python-3.7.4 --ml=MongoDB/4.0.3 --ml=Python/3.7.4-GCCcore-8.3.0 --python_import=pymongo --python_import=hyperopt --bash=mongod
+Example
+    perl ml.pl --modenv=ml --ml=Hyperopt/0.2.2-fosscuda-2019b-Python-3.7.4 --ml=MongoDB/4.0.3 --ml=Python/3.7.4-GCCcore-8.3.0 --python_import=pymongo --python_import=hyperopt --bash=mongod
+
+Parameters
+
+        --ml=ModuleName/Version                 Specifies module to be loaded
+        --max_tries=100                         Stops after 100 combinations
+        --max_time=120                          Stops after ca. 120 seconds of trying
+        --python_import=hyperopt                Needs to be able to load hyperopt before declaring success
+        --bash="simple_command"                 Needs to run simple_command and exit with 0 before declaring success
+        --programs_to_find=mongod               Needs to be able to find a "mongod" executable in the PATHs
+        --modenv=scs5                           Specifies under which modenv should be looked (needed!)
+        --help                                  This help
 EOF
 
         exit $exit_code;
@@ -141,6 +173,10 @@ sub analyze_args {
         foreach (@_) {
                 if(m#^--ml=(.*)$#) {
                         push @{$options{modules_to_load}}, $1;
+                } elsif (m#^--max_tries=(\d+)$#) {
+                        $options{max_tries} = $1;
+                } elsif (m#^--max_time=(\d+)$#) {
+                        $options{max_time} = $1;
                 } elsif (m#^--python_import=(.*)$#) {
                         push @{$options{python_modules_to_load}}, $1;
                 } elsif (m#^--bash=(.*)$#) {
