@@ -58,7 +58,7 @@ sub main {
             my $ret = check_combination($shuffled, $i, $max_number_of_combinations);
             if($ret eq "ALREADYDONE") {
                 $already_dones++;
-            } else {
+            } elsif ($ret eq 'FAILED') {
                 $i++;
             }
 
