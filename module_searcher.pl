@@ -2,10 +2,11 @@
 
 use strict;
 use warnings;
-use Data::Dumper;
 use lib './perllib';
 use Env::Modify 'system';
 use Term::ANSIColor;
+use Data::Dumper;
+use Digest::MD5 qw/md5_hex/;
 
 my %options = (
         modules_to_load => [],
@@ -16,6 +17,8 @@ my %options = (
         max_tries => 0,
         max_time => 0
 );
+
+my %already_checked = ();
 
 analyze_args(@ARGV);
 
@@ -31,16 +34,34 @@ sub green ($) {
         print color('green bold').$p.color("reset")."\n";
 }
 
+
+sub faculty {
+    my $n = shift ;
+    my $product = 1 ;
+    foreach my $i ( 1..$n ) {
+        $product *= $i ;
+    }
+    return $product ;
+}
+
 sub main {
         my $continue = 1;
         my $i = 1;
         my $t_start = time();
+        my $already_dones = 0;
+
+        my $max_number_of_combinations = faculty(scalar @{$options{modules_to_load}});
+
         while ($continue) {
-            print "=============================>\n";
             my $shuffled = \@{$options{modules_to_load}};
             fisher_yates_shuffle($shuffled);
-            check_combination($shuffled);
-            $i++;
+            my $ret = check_combination($shuffled, $i, $max_number_of_combinations);
+            if($ret eq "ALREADYDONE") {
+                $already_dones++;
+            } else {
+                $i++;
+            }
+
             if($options{max_tries} && $i > $options{max_tries}) {
                 warn "Reached limit of maximally $options{max_tries} checks. Stopping";
                 $continue = 0;
@@ -51,15 +72,31 @@ sub main {
                 warn "Hit time limit ($diff > $options{max_time})";
                 $continue = 0;
             }
+
+            if($already_dones >= $max_number_of_combinations) {
+                print "Checked all combinations, none seemed to have worked\n";
+                exit 1;
+            }
         }
 }
 
 sub check_combination {
-        my $shuffled = shift;
+        my ($shuffled, $i, $max) = @_;
+
+        my $hash = md5_hex(Dumper($shuffled));
+
+        if (exists $already_checked{$hash}) {
+                return 'ALREADYDONE';
+        }
+
+        $already_checked{$hash} = 1;
+
+        print "$i of $max =============================>\n";
 
         my $ok = 1;
         module_purge();
         module_load("modenv/$options{modenv}");
+
 
         foreach my $ml (@{$shuffled}) {
                 module_load($ml);
@@ -106,6 +143,8 @@ sub check_combination {
                 my $reset = color("reset");
                 print "permutation:\n".$ongreen."module load ".join("$reset\n$ongreen"."module load ", @{$shuffled})."$reset\n";
                 exit 0;
+        } else {
+                return 'FAILED';
         }
 }
 
